@@ -39,7 +39,9 @@ namespace WpfApp1
                 {
                     var str = await ReceiveTextFromPipe(ctr.Token);
                     Console.WriteLine($"Message received: {str}");
+                    Thread.Sleep(1000);// Important to wait in order to let the old server die/finish up the connection
                 }
+
 
             }).Start();
             
