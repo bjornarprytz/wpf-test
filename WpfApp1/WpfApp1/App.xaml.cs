@@ -2,6 +2,8 @@
 using System;
 using System.IO;
 using System.IO.Pipes;
+using System.Security.AccessControl;
+using System.Security.Principal;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -24,18 +26,23 @@ namespace WpfApp1
 
             await SingleInstanceChecker.EnsureIsSingleInstance(PIPE_NAME,
                 () => RegisterUriScheme(),
-                () => SendTextToPipe(e.Args[1], () => { }, ctr.Token));
+                () => SendTextToPipe("Testing", () => { }, ctr.Token));
 
 
             base.OnStartup(e);
 
-            Task.Run(async () =>
+            new Thread( async () =>
             {
+                Thread.CurrentThread.IsBackground = true;
+
                 while (true)
                 {
-                    await ReceiveTextFromPipe(ctr.Token);
-                };
-            });
+                    var str = await ReceiveTextFromPipe(ctr.Token);
+                    Console.WriteLine($"Message received: {str}");
+                }
+
+            }).Start();
+            
         }
 
 
@@ -57,9 +64,9 @@ namespace WpfApp1
         {
             string receivedText;
 
-            PipeSecurity ps = new PipeSecurity();
-            System.Security.Principal.SecurityIdentifier sid = new System.Security.Principal.SecurityIdentifier(System.Security.Principal.WellKnownSidType.WorldSid, null);
-            PipeAccessRule par = new PipeAccessRule(sid, PipeAccessRights.ReadWrite, System.Security.AccessControl.AccessControlType.Allow);
+            var ps = new PipeSecurity();
+            var sid = new SecurityIdentifier(WellKnownSidType.WorldSid, null);
+            var par = new PipeAccessRule(sid, PipeAccessRights.ReadWrite, AccessControlType.Allow);
             ps.AddAccessRule(par);
 
             using (var pipeStream = new NamedPipeServerStream(PIPE_NAME, PipeDirection.InOut, 1, PipeTransmissionMode.Message, PipeOptions.Asynchronous, 4096, 4096, ps))
@@ -77,12 +84,12 @@ namespace WpfApp1
 
         private async Task SendTextToPipe(string msg, Action onSendFailed, CancellationToken cancellationToken)
         {
-            using (var client = new NamedPipeClientStream(PIPE_NAME))
+            using (var client = new NamedPipeClientStream(".", PIPE_NAME))
             {
                 try
                 {
                     var millisecondsTimeout = 2000;
-                    await client.ConnectAsync(millisecondsTimeout);
+                    await client.ConnectAsync(millisecondsTimeout, cancellationToken);
                 }
                 catch (Exception)
                 {
